@@ -4,35 +4,76 @@ namespace Mazuk\SILP;
 
 class Structure {
 
-    /**
-     * @param array $fields
-     */
-    public function __construct(array $fields = []) {
-        foreach ($fields as $key => $value) {
-            if (!property_exists($this, $key)) {
+    /** @var array */
+    protected $structureFields = [];
+
+    public function __construct(iterable $data = []) {
+        foreach ($data as $field => $value) {
+            if (!property_exists($this, $field)) {
                 continue;
             }
-
-            $this->{$key} = $value;
+            if ($this->isSimpleStructureField($field)) {
+                if (is_iterable($value)) {
+                    $this->{$field} = new $this->structureFields[$field]($value);
+                }
+            } elseif ($this->isStructureListField($field)) {
+                if (is_iterable($value)) {
+                    $this->{$field} = array_map(function (iterable $item) use ($field) {
+                        return new $this->structureFields[$field][0]($item);
+                    }, $value);
+                }
+            } else {
+                $this->{$field} = $value;
+            }
         }
     }
 
-    /**
-     * @param array|null $fieldList
-     * @return array
-     */
     public function toArray(array $fieldList = null): array {
-        $structureFields = array_keys(get_class_vars(static::class));
+        $fieldList = $fieldList ?? $this->getFieldList();
         $result = [];
 
-        foreach ($structureFields as $field) {
-            if (isset($fieldList) && !in_array($field, $fieldList)) {
+        foreach ($fieldList as $field) {
+            if (!property_exists($this, $field)) {
                 continue;
             }
-            $result[$field] = $this->{$field};
+            if ($this->isSimpleStructureField($field) && $this->isStructureInstance($field)) {
+                $result[$field] = $this->{$field}->toArray();
+            } elseif ($this->isStructureListField($field) && is_iterable($this->{$field})) {
+                $result[$field] = array_map(function (Structure $structure) {
+                    return $structure->toArray();
+                }, $this->{$field});
+            } else {
+                $result[$field] = $this->{$field};
+            }
         }
 
         return $result;
+    }
+
+    protected function getFieldList(): array {
+        $reflectionObject = new \ReflectionObject($this);
+
+        $reflectionProperties = $reflectionObject->getProperties(\ReflectionProperty::IS_PUBLIC);
+
+        return array_map(function (\ReflectionProperty $properties) {
+            return $properties->name;
+        }, $reflectionProperties);
+    }
+
+    protected function isSimpleStructureField(string $field): bool {
+        return $this->isStructureField($field) && is_string($this->structureFields[$field]);
+    }
+
+    protected function isStructureListField(string $field): bool {
+        return $this->isStructureField($field) && is_array($this->structureFields[$field]);
+    }
+
+    protected function isStructureField(string $field): bool {
+        return array_key_exists($field, $this->structureFields);
+    }
+
+    protected function isStructureInstance(string $field): bool {
+        return $this->{$field} instanceof Structure;
     }
 
 }

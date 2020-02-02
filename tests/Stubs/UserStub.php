@@ -9,4 +9,13 @@ class UserStub extends Structure {
     public $id;
     /** @var string */
     public $name;
+    /** @var FileStub */
+    public $avatar;
+    /** @var FileStub[] */
+    public $images;
+
+    protected $structureFields = [
+        'avatar' => FileStub::class,
+        'images' => [FileStub::class],
+    ];
 }
